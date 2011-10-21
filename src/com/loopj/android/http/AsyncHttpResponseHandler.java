@@ -19,6 +19,7 @@
 package com.loopj.android.http;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -28,8 +29,9 @@ import org.apache.http.entity.BufferedHttpEntity;
 import org.apache.http.util.EntityUtils;
 
 import android.os.Handler;
-import android.os.Message;
 import android.os.Looper;
+import android.os.Message;
+import android.util.Log;
 
 /**
  * Used to intercept and handle the responses from requests made using 
@@ -71,6 +73,7 @@ public class AsyncHttpResponseHandler {
     private static final int FAILURE_MESSAGE = 1;
     private static final int START_MESSAGE = 2;
     private static final int FINISH_MESSAGE = 3;
+	private static final int SUCCESS_MESSAGE_STREAM = 4;
 
     private Handler handler;
 
@@ -110,6 +113,12 @@ public class AsyncHttpResponseHandler {
     public void onSuccess(String content) {}
 
     /**
+     * Fired when a request returns successfully, override to handle in your own code
+     * @param content the input stream of the body of the HTTP response from the server
+     */
+    public void onSuccess(InputStream stream) {}
+
+    /**
      * Fired when a request fails to complete, override to handle in your own code
      * @param error the underlying cause of the failure
      */
@@ -122,6 +131,10 @@ public class AsyncHttpResponseHandler {
 
     protected void sendSuccessMessage(String responseBody) {
         sendMessage(obtainMessage(SUCCESS_MESSAGE, responseBody));
+    }
+    
+    protected void sendSuccessMessage(InputStream responseStream) {
+        sendMessage(obtainMessage(SUCCESS_MESSAGE_STREAM, responseStream));
     }
 
     protected void sendFailureMessage(Throwable e) {
@@ -144,6 +157,10 @@ public class AsyncHttpResponseHandler {
     protected void handleSuccessMessage(String responseBody) {
         onSuccess(responseBody);
     }
+    
+    protected void handleSuccessMessage(InputStream responseStream) {
+        onSuccess(responseStream);
+    }
 
     protected void handleFailureMessage(Throwable e) {
         onFailure(e);
@@ -156,6 +173,9 @@ public class AsyncHttpResponseHandler {
         switch(msg.what) {
             case SUCCESS_MESSAGE:
                 handleSuccessMessage((String)msg.obj);
+                break;
+            case SUCCESS_MESSAGE_STREAM:
+                handleSuccessMessage((InputStream)msg.obj);
                 break;
             case FAILURE_MESSAGE:
                 handleFailureMessage((Throwable)msg.obj);
@@ -202,11 +222,20 @@ public class AsyncHttpResponseHandler {
                 if(temp != null) {
                     entity = new BufferedHttpEntity(temp);
                 }
-
-                sendSuccessMessage(EntityUtils.toString(entity));
+                
+                if(isContentTypeBinary(entity.getContentType().getValue())) {
+                	sendSuccessMessage(entity.getContent());
+                } else {
+                	sendSuccessMessage(EntityUtils.toString(entity));
+                }
             } catch(IOException e) {
                 sendFailureMessage(e);
             }
         }
+    }
+    
+    private boolean isContentTypeBinary(String contentType) {
+    	Log.i("AsyncHttpResponseHandler", "Testing content type for binaryness: " + contentType);
+    	return contentType.startsWith("image/");
     }
 }
